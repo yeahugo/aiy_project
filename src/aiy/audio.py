@@ -72,8 +72,15 @@ def get_player():
         _voicehat_player = aiy._drivers._player.Player()
     return _voicehat_player
 
-
 def get_recorder():
+    """Returns a driver to control the VoiceHat microphones.
+
+    The aiy modules automatically use this recorder. So usually you do not need to
+    use this.
+    """
+    return aiy._drivers._recorder.Recorder()
+
+def get_recorder_():
     """Returns a driver to control the VoiceHat microphones.
 
     The aiy modules automatically use this recorder. So usually you do not need to
