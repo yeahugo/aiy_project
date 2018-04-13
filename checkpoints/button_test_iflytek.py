@@ -25,7 +25,12 @@ import tempfile
 import textwrap
 import traceback
 import json
+import time
+import base64
+import hashlib
 import threading
+import requests
+from urllib import request,parse
 
 import aiy.audio  # noqa 
 from aiy._drivers._hat import get_aiy_device_name
@@ -33,12 +38,14 @@ from pygame import mixer
 import aiy.voicehat
 
 x_appid = "5a3e1156"
-api_key = "4f8cbbb1c1a64fe1b13198c0d75c3137"
+asr_api_key = "4f8cbbb1c1a64fe1b13198c0d75c3137"
+tts_api_key = "8cfb0239801cdb231187c06dc4303ac3"
 
+URL = "http://api.xfyun.cn/v1/service/v1/tts"
+AUE = "raw"
 APP_ID = '10989863'
 API_KEY = 'fRNevkB4V0PjDbCnvjkWM8Pt'
-SECRET_KEY = 'c470690ea39ec1645812db1f3d0d2d02'
-baidu_client = AipSpeech(APP_ID,API_KEY,SECRET_KEY)
+#SECRET_KEY = 'c470690ea39ec1645812db1f3d0d2d02'
 
 AIY_PROJECTS_DIR = os.path.dirname(os.path.dirname(__file__))
 
@@ -65,20 +72,13 @@ def get_file_content(filePath):
 
 
 def enable_audio_driver():
-    print("Enabling audio driver for VoiceKit.")
     configure_driver = os.path.join(AIY_PROJECTS_DIR, 'scripts', 'configure-driver.sh')
     subprocess.check_call(['sudo', configure_driver])
 
 def asr(file_path):
-    print("python version : .{}".format(sys.version))
     requrl = "https://api.xfyun.cn/v1/aiui/v1/iat"
-    print('requrl:{}'.format(requrl))
-    #讯飞开放平台注册申请应用的应用ID(APPID)
-    #x_appid = "5a60085b";
-    print('X-Appid:{}'.format(x_appid))
     #得到当前UTC时间戳
     cur_time = int(time.time())
-    print('X-CurTime:{}'.format(cur_time))
     #标准JSON格式参数
     x_param = {"auf":"16k","aue":"raw","scene":"main"}
     x_param = json.dumps(x_param)
@@ -90,19 +90,44 @@ def asr(file_path):
     file_base64 = base64.b64encode(file_data.read())
     file_data.close()
     body_data = "data="+file_base64.decode("utf-8")
-    #ApiKey创建应用时自动生成
-    token = api_key + str(cur_time)+ xparam_base64 + body_data
+    token = asr_api_key + str(cur_time)+ xparam_base64 + body_data
     m = hashlib.md5()
     m.update(token.encode(encoding='utf-8'))
     x_check_sum = m.hexdigest()
-    print('X-CheckSum:{}'.format(x_check_sum))
     headers = {"X-Appid": x_appid,"X-CurTime": cur_time,"X-Param":xparam_base64,"X-CheckSum":x_check_sum,"Content-Type":"application/x-www-form-urlencoded"}
-    print("headers : {}".format(headers))
     req = request.Request(requrl, data=body_data.encode('utf-8'), headers=headers, method="POST")
     with request.urlopen(req) as f:
         body = f.read().decode('utf-8')
         return body
-        print("result body : {}".format(body))
+
+def getHeader():
+        curTime = str(int(time.time()))
+        param = "{\"aue\":\""+AUE+"\",\"auf\":\"audio/L16;rate=16000\",\"voice_name\":\"xiaoyan\",\"engine_type\":\"intp65\"}"
+        param_encode = param.encode(encoding="utf-8")
+        paramBase64 = base64.b64encode(param_encode).decode().strip('\n')
+        m2 = hashlib.md5()
+        token = tts_api_key + curTime + paramBase64
+        m2.update(token.encode(encoding='utf-8'))
+        checkSum = m2.hexdigest()
+        header ={
+                'X-CurTime':curTime,
+                'X-Param':paramBase64,
+                'X-Appid':x_appid,
+                'X-CheckSum':checkSum,
+                'X-Real-Ip':'127.0.0.1',
+                'Content-Type':'application/x-www-form-urlencoded; charset=utf-8',
+        }
+        return header
+
+def getBody(text):
+        data = {'text':text}
+        return data
+
+def writeFile(file, content):
+    with open(file, 'wb') as f:
+        f.write(content)
+    f.close()
+
 
 def main():
     with aiy.audio.get_recorder() as recorder:
@@ -121,6 +146,28 @@ def main():
             status_ui.status('stopping')
             result = asr(temp_path)
             print(result)
+            result_dict = json.loads(result)
+            if result_dict['code'] == '00000':
+                result_txt = result_dict['data']['result']
+                print(result_txt)
+                r = requests.post(URL,headers=getHeader(),data=getBody(result_txt))
+                contentType = r.headers['Content-Type']
+                if contentType == "audio/mpeg":
+                    sid = r.headers['sid']
+                    audio_filepath = "audio/"
+                    if AUE == "raw":
+                        audio_filepath += sid + ".wav"
+                        
+                    else :
+                        audio_filepath += sid + ".mp3"
+                        writeFile("audio/"+sid+".mp3", r.content)
+                    print("success, sid = " + sid)
+                    writeFile(audio_filepath, r.content)
+                    mixer.init()
+                    mixer.music.load(audio_filepath)
+                    mixer.music.play()
+                else :
+                    print(r.text) 
          
 
 if __name__ == '__main__':
