@@ -32,6 +32,9 @@ from aiy._drivers._hat import get_aiy_device_name
 from pygame import mixer
 import aiy.voicehat
 
+x_appid = "5a3e1156"
+api_key = "4f8cbbb1c1a64fe1b13198c0d75c3137"
+
 APP_ID = '10989863'
 API_KEY = 'fRNevkB4V0PjDbCnvjkWM8Pt'
 SECRET_KEY = 'c470690ea39ec1645812db1f3d0d2d02'
